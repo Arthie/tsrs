@@ -73,6 +73,19 @@ pub fn set_heap_hooks(stats: fn() -> HeapStats, collect: fn(bool)) {
     let _ = HEAP_COLLECT.set(collect);
 }
 
+/// The heap walk's totals, if the binary installed the hooks (`set_heap_hooks`), whether or not the stat is on.
+pub fn heap_stats() -> Option<HeapStats> {
+    HEAP_STATS.get().map(|f| f())
+}
+
+/// The reservation's chunks in use (live and retired ranges, `reserve::discard`), in bytes.
+pub fn reservation_in_use() -> usize {
+    #[cfg(compressed_ptrs)]
+    return crate::reserve::reserved_in_use();
+    #[cfg(not(compressed_ptrs))]
+    0
+}
+
 /// The allocator's collect on the calling thread (`force` also purges every arena's freed memory), if installed.
 pub fn heap_collect(force: bool) {
     if let Some(f) = HEAP_COLLECT.get() {
@@ -159,6 +172,20 @@ struct ArenaTotals {
     retired_resident: usize,
     /// Arenas whose current chunk is a huge-page chunk (2 MiB blocks).
     huge_current: usize,
+}
+
+/// The thread arenas' count, capacity and used bytes, as `report` prints them; `None` unless the stat is on (arenas
+/// are recorded only then). Same conditions as `report`: the threads that allocate are parked.
+pub fn arena_totals() -> Option<(usize, usize, usize)> {
+    if !enabled() {
+        return None;
+    }
+    let arenas = ARENAS.lock().unwrap();
+    let (capacity, used) = arenas.iter().fold((0, 0), |(capacity, used), a| {
+        let r = a.0.residency();
+        (capacity + r.capacity, used + r.used)
+    });
+    Some((arenas.len(), capacity, used))
 }
 
 /// Prints the split for point `what` on stderr.
@@ -361,6 +388,11 @@ pub fn process_memory() -> usize {
     VALUE.store(v, Ordering::Relaxed);
     LAST_NS.store(now.max(1), Ordering::Relaxed);
     v
+}
+
+/// `process_memory` read now rather than from the 5 ms cache (debug stats that compare two readings).
+pub fn process_memory_now() -> usize {
+    read_process_memory()
 }
 
 #[cfg(target_os = "macos")]

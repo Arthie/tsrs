@@ -49,6 +49,26 @@ struct Shared {
 }
 
 impl Shared {
+    fn stats(&self) -> crate::memtrace::SharedStats {
+        let regions = self.regions.lock().unwrap();
+        let mut files = 0;
+        self.files.range(|_, _| {
+            files += 1;
+            true
+        });
+        let mut references = 0;
+        self.references.range(|_, _| {
+            references += 1;
+            true
+        });
+        crate::memtrace::SharedStats {
+            regions: regions.len(),
+            allocated: regions.iter().map(tsrs_core::arena::Region::allocated_bytes).sum(),
+            files,
+            references,
+        }
+    }
+
     fn keep<T>(&self, first_chunk: usize, make: impl FnOnce() -> T) -> T {
         let region = tsrs_core::arena::Region::new(first_chunk);
         let _scope = region.enter();
@@ -151,6 +171,9 @@ pub fn run(
     let entries_overrides = Arc::clone(&overrides);
     let stat_overrides = Arc::clone(&overrides);
     let realpath_overrides = Arc::clone(&overrides);
+    if crate::memtrace::enabled() {
+        crate::memtrace::start_request();
+    }
     let read_cache = tsrs_core::collections::SyncMap::<String, Option<String>>::default();
     let fs = wrapvfs::wrap(
         osvfs::fs(),
@@ -166,6 +189,9 @@ pub fn run(
                     return source;
                 }
                 let source = osvfs::fs().read_file(path);
+                if crate::memtrace::enabled() {
+                    crate::memtrace::note_read(source.as_deref());
+                }
                 read_cache.store(path.to_owned(), source.clone());
                 source
             })),
@@ -323,7 +349,10 @@ fn run_in_region(
         }
     }
     drop(config_cache);
-    let shared = Arc::default();
+    if crate::memtrace::enabled() {
+        crate::memtrace::discovery(programs.len(), file_configs.len());
+    }
+    let shared: Arc<Shared> = Arc::default();
     let programs: Vec<(String, Vec<String>)> = programs.into_iter().collect();
     let next = AtomicUsize::new(0);
     let linted: Vec<Mutex<Option<Linted>>> = programs.iter().map(|_| Mutex::new(None)).collect();
@@ -347,6 +376,7 @@ fn run_in_region(
                         };
                         let mut output = Vec::new();
                         let mut program_timings = BTreeMap::new();
+                        let start_ms = crate::memtrace::program_start();
                         let result = lint_program(
                             config_path,
                             files,
@@ -360,6 +390,16 @@ fn run_in_region(
                             &mut program_timings,
                         );
                         *linted[index].lock().unwrap() = Some((result, output, program_timings));
+                        if crate::memtrace::enabled() {
+                            crate::memtrace::program(&crate::memtrace::Program {
+                                index,
+                                config: config_path,
+                                files: files.len(),
+                                start_ms,
+                                thread_scratch: Some(&region),
+                                shared: shared.stats(),
+                            });
+                        }
                     }
                     drop(entered);
                     scratch.lock().unwrap().push(region);

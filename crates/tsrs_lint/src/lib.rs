@@ -8,6 +8,8 @@ pub mod registry;
 
 pub mod engine;
 
+mod memtrace;
+
 pub mod rule;
 
 pub mod utils;

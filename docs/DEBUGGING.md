@@ -250,6 +250,13 @@ notes/mem-linux-residency-32.md). `TSRS_MEM_SPLIT=purge` also has mimalloc purge
 with interleaved timed reps when the disabled `.github/workflows/perf-probe.yml.bak` is restored to `perf-probe.yml`
 (`ubuntu-24.04` by default).
 
+`TSRS_LINT_MEM_TRACE=1` (`tsrs-lint headless` or `tsrs --lint headless`) prints a `tsrs-lint trace` JSON line on stderr
+after project discovery and after each tsconfig program has been linted and freed: the process memory, the program
+thread's and the request's scratch regions, the `Shared` regions and the file text cache, and with `TSRS_MEM_SPLIT=1`
+also the thread arenas and, through `tsrs --lint` (which installs the allocator hooks), mimalloc's live heap.
+`TSRS_LINT_MEM_TRACE=purge` has mimalloc purge before each reading. `bench/lint-retention/measure.mjs` fits the growth of
+each store per program (notes/mem-lint-retention.md).
+
 ## Optional build features
 
 For tooling builds, append these arguments to `cargo build --profile dev -p tsrs_cli` (use `--release` for

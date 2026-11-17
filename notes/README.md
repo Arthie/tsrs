@@ -231,6 +231,7 @@ Every note is listed once below by subject. The links above are suggested starti
 - [mem-free-leaf-files](mem-free-leaf-files.md)
 - [mem-leaf-regions-32](mem-leaf-regions-32.md)
 - [mem-leaf-regions-cost](mem-leaf-regions-cost.md)
+- [mem-lint-retention](mem-lint-retention.md)
 - [mem-linux-residency-32](mem-linux-residency-32.md)
 - [mem-never-read-apps](mem-never-read-apps.md)
 - [mem-no-thp](mem-no-thp.md)
